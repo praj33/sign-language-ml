@@ -1,29 +1,24 @@
-# Sign Language Translator Glove
+# Sign Language Recognition using Flex Sensors (5 Sensor System)
 
-Hackathon-ready software stack that maps 5 flex sensor readings to letters using a machine learning model, builds words from stable predictions, and speaks completed words.
+## Overview
+This project detects hand gestures using 5 flex sensors and a machine learning model.
 
-## Features
-- RandomForestClassifier trained on flex sensor readings
-- Sliding window smoothing with confidence threshold
-- Stable frame counter to reduce jitter
-- Word building from predicted letters
-- Text-to-speech for whole words only
-- Keyboard controls for speak and reset
-- Modular sensor input stub for Arduino or ESP32 integration
+## System Flow
+Flex Sensors → Arduino → Serial → Python → ML Model → Output
+
+## Components
+- Arduino Nano
+- 5 Flex Sensors (Thumb, Index, Middle, Ring, Little)
+- Python ML Model (Random Forest)
+
+## Model
+Random Forest Classifier
 
 ## How to Run
-1. Install dependencies: `pip install -r requirements.txt`
-2. Train the model: `python train_model.py`
-3. Start live prediction: `python live_predict.py`
-
-## Demo Controls
-- `SPACE` speaks the current word
-- `R` resets the current word
-- `Ctrl+C` exits
-
-## Future Work
-- Replace `get_sensor_values()` with real serial data from Arduino/ESP32
-- Add calibration and normalization per user
-- Expand dataset to cover more letters and gestures
-- Add a language model for autocorrect and phrase suggestions
-- Build a lightweight UI for accessibility
+1. Upload Arduino code
+2. Install dependencies:
+   pip install -r requirements.txt
+3. Train model:
+   python train_model.py
+4. Run prediction:
+   python live_predict.py

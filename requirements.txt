@@ -4,3 +4,4 @@ scikit-learn
 joblib
 pyttsx3
 keyboard
+pyserial

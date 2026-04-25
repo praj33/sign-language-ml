@@ -1,151 +1,71 @@
-import json
-import time
-from collections import deque
-from pathlib import Path
-
 import joblib
-import keyboard
 import numpy as np
-import pyttsx3
 
-MODEL_PATH = "sign_language_rf_model.pkl"
-CALIBRATION_PATH = Path("calibration.json")
+# Load model
+model = joblib.load("model.pkl")
 
-WINDOW_SIZE = 7
-STABLE_FRAMES = 6
-CONFIDENCE_THRESHOLD = 0.65
-LOOP_DELAY = 0.05
+print("Choose mode:")
+print("1 → Manual Input (No Arduino)")
+print("2 → Arduino Mode")
 
-FEATURE_COUNT = 5
+mode = input("Enter mode (1/2): ")
 
-engine = pyttsx3.init()
-engine.setProperty("rate", 150)
-engine.setProperty("volume", 1.0)
+# ---------------------------
+# MANUAL MODE (NO HARDWARE)
+# ---------------------------
+if mode == "1":
+    print("Enter 5 sensor values: S1,S2,S3,S4,S5")
 
-model = joblib.load(MODEL_PATH)
+    while True:
+        try:
+            user_input = input("Values: ")
+            values = list(map(int, user_input.split(",")))
 
-window = deque(maxlen=WINDOW_SIZE)
-prev_letter = None
-stable_count = 0
-word = ""
+            if len(values) != 5:
+                print("Enter exactly 5 values")
+                continue
 
-last_space = False
-last_r = False
+            X = np.array([values])
+            prediction = model.predict(X)[0]
 
+            print("Gesture:", prediction)
 
-def get_sensor_values():
-    """Placeholder for real sensor data. Returns 5 floats."""
-    return np.random.rand(FEATURE_COUNT)
+        except:
+            print("Invalid input")
 
+# ---------------------------
+# ARDUINO MODE
+# ---------------------------
+elif mode == "2":
+    import serial
+    from collections import deque
 
-def load_calibration():
-    if not CALIBRATION_PATH.exists():
-        print("Calibration file not found. Running without normalization.")
-        return None
+    ser = serial.Serial("COM3", 9600)  # change COM if needed
+    window = deque(maxlen=5)
 
-    try:
-        data = json.loads(CALIBRATION_PATH.read_text())
-        open_vals = np.asarray(data["open"], dtype=float)
-        closed_vals = np.asarray(data["closed"], dtype=float)
-        if open_vals.shape[0] != FEATURE_COUNT or closed_vals.shape[0] != FEATURE_COUNT:
-            print("Calibration has wrong feature count. Ignoring it.")
-            return None
-        print("Calibration loaded.")
-        return {"open": open_vals, "closed": closed_vals}
-    except Exception:
-        print("Failed to load calibration. Running without normalization.")
-        return None
+    print("Listening from Arduino...")
 
+    while True:
+        try:
+            line = ser.readline().decode().strip()
+            values = list(map(int, line.split(",")))
 
-def apply_calibration(values, calibration):
-    if calibration is None:
-        return values
+            if len(values) != 5:
+                continue
 
-    open_vals = calibration["open"]
-    closed_vals = calibration["closed"]
-    span = closed_vals - open_vals
-    span = np.where(np.abs(span) < 1e-6, 1e-6, span)
-    normalized = (values - open_vals) / span
-    return np.clip(normalized, 0.0, 1.0)
+            X = np.array([values])
 
+            probs = model.predict_proba(X)[0]
+            pred = model.classes_[np.argmax(probs)]
+            confidence = max(probs)
 
-def reset_state():
-    global prev_letter, stable_count, word
-    prev_letter = None
-    stable_count = 0
-    word = ""
+            window.append(pred)
 
+            if len(window) == 5:
+                final = max(set(window), key=window.count)
 
-def speak_word(text):
-    if not text:
-        return
-    engine.say(text)
-    engine.runAndWait()
+                if confidence > 0.6:
+                    print("Gesture:", final)
 
-
-def status_line(letter, confidence, current_word):
-    letter_display = letter if letter else "-"
-    return f"LETTER: {letter_display} | CONF: {confidence:.2f} | WORD: {current_word}"
-
-
-calibration = load_calibration()
-
-print("SIGN LANGUAGE TRANSLATOR GLOVE")
-print("Controls: SPACE = speak word, R = reset, Ctrl+C = exit")
-print("Waiting for sensor data...\n")
-
-while True:
-    raw_values = np.asarray(get_sensor_values(), dtype=float)
-    if raw_values.shape[0] != FEATURE_COUNT:
-        print("\nSensor input error: expected 5 values.")
-        time.sleep(1)
-        continue
-
-    values = apply_calibration(raw_values, calibration)
-    window.append(values)
-
-    if len(window) < WINDOW_SIZE:
-        time.sleep(LOOP_DELAY)
-        continue
-
-    avg = np.mean(window, axis=0)
-
-    # Keyboard controls with edge detection
-    space_pressed = keyboard.is_pressed("space")
-    if space_pressed and not last_space:
-        print("\nSPEAK:", word if word else "(empty)")
-        speak_word(word)
-        reset_state()
-    last_space = space_pressed
-
-    r_pressed = keyboard.is_pressed("r")
-    if r_pressed and not last_r:
-        print("\nRESET")
-        reset_state()
-    last_r = r_pressed
-
-    probs = model.predict_proba(avg.reshape(1, -1))[0]
-    confidence = float(np.max(probs))
-    letter = model.classes_[int(np.argmax(probs))]
-
-    if confidence < CONFIDENCE_THRESHOLD:
-        prev_letter = None
-        stable_count = 0
-        letter_out = None
-    else:
-        if letter == prev_letter:
-            stable_count += 1
-        else:
-            stable_count = 1
-            prev_letter = letter
-
-        if stable_count >= STABLE_FRAMES:
-            word += letter
-            stable_count = 0
-            prev_letter = None
-
-        letter_out = letter
-
-    line = status_line(letter_out, confidence, word)
-    print("\r" + line.ljust(80), end="", flush=True)
-    time.sleep(LOOP_DELAY)
+        except:
+            continue
